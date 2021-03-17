@@ -151,6 +151,8 @@ void setup()
 
   // flush serial input buffer
   while( Serial.available() ) Serial.read();
+
+  printModemResult(E_OK);
 }
 
 
@@ -780,7 +782,26 @@ void handleModemCommand()
                   if( n == 0 )
                     {
                       printModemCR();
-                      Serial.print(F("Ethernet Modem 1.0"));
+                      Serial.print(F("Ethernet/"));
+                      switch(Ethernet.hardwareStatus())
+                        {
+                          case EthernetW5100:
+                            Serial.print(F("W5100"));
+                            break;
+                          case EthernetW5200:
+                            Serial.print(F("W5200"));
+                            break;
+                          case EthernetW5500:
+                            Serial.print(F("W5500"));
+                            break;
+                          case EthernetENC28J60:
+                            Serial.print(F("ENC28J60"));
+                            break;
+                          default:
+                            Serial.print(F("Unknown"));
+                            break;
+                        }
+                      Serial.print(F(" Modem 1.0"));
                       printModemCR();
                       Serial.print(F("IP="));
                       Serial.print(Ethernet.localIP());
