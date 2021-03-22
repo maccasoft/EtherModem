@@ -16,7 +16,7 @@ uint8_t modemEscapeState = 0;
 bool    modemCommandMode = true;
 
 
-const uint8_t regDefaults[] = {2, '+', 
+const PROGMEM uint8_t regDefaults[] = {2, '+', 
                                3, '\r', 
                                4, '\n', 
                                5, 8, 
@@ -31,7 +31,7 @@ const uint8_t regDefaults[] = {2, '+',
                                38, 20};
 
 
-static int linespeeds[] = {0, 75, 110, 300, 600, 1200, 2400, 4800, 7200, 9600, 12000, 14400};
+const PROGMEM int linespeeds[] = {0, 75, 110, 300, 600, 1200, 2400, 4800, 7200, 9600, 12000, 14400};
 #define NSPEEDS (sizeof(linespeeds)/sizeof(int))
 
 #define LED_PIN            2
@@ -133,7 +133,7 @@ void setup()
       ModemData.parity   = 0;
       ModemData.stopbits = 1;
       ModemData.silent   = false;
-      strcpy(ModemData.telnetTerminalType, "vt100");
+      strcpy(ModemData.telnetTerminalType, PSTR("vt100"));
       for(int i=0; i<sizeof(regDefaults); i+=2)
         {
           ModemData.reg[regDefaults[i]] = regDefaults[i+1];
@@ -191,8 +191,8 @@ void printMac()
   int i;
   for (i = 0; i < 6; i++)
     {
-      if (i != 0) Serial.print(":");
-      if (mac[i] < 16) Serial.print("0");
+      if (i != 0) Serial.print(F(":"));
+      if (mac[i] < 16) Serial.print(F("0"));
       Serial.print(mac[i], HEX);
     }
 }
@@ -224,7 +224,7 @@ void printModemResult(byte code)
             default:
               {
                 char buf[20];
-                sprintf(buf, "ERROR%i", code);
+                sprintf(buf, PSTR("ERROR%i"), code);
                 Serial.print(buf);
                 break;
               }
@@ -321,7 +321,7 @@ bool handleTelnetProtocol(uint8_t b, EthernetClient &client, struct TelnetStateS
       if( b==0 )
         {
           // CR->NUL => CR (i.e. ignore the NUL)
-          if( ModemData.reg[REG_TELNET]>1 ) Serial.print("<0d<00");
+          if( ModemData.reg[REG_TELNET]>1 ) Serial.print(F("<0d<00"));
           return true;
         }
     }
@@ -927,7 +927,7 @@ void handleModemCommand()
               else if( cmd[ptr]=='+' )
                 {
                   ptr++;
-                  if( strncmpi(cmd+ptr, "UART", 4)==0 )
+                  if( strncmpi(cmd+ptr, PSTR("UART"), 4)==0 )
                     {
                       ptr += 4;
                       int i = getCmdParam(cmd, ptr);
