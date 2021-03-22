@@ -7,7 +7,9 @@ uint8_t mac[6] = {
   0x00,0x01,0x02,0x03,0x04,0x05
 };
 
+EthernetServer server(23);
 EthernetClient modemClient;
+EthernetClient telnetClient;
 
 unsigned long lastConnectCheck = 0;
 unsigned long prevCharTime = 0;
@@ -147,6 +149,8 @@ void setup()
   Serial.begin(ModemData.baud);
   Ethernet.begin(mac);
 
+  server.begin(23);
+
   resetModemState();
 
   // flush serial input buffer
@@ -175,6 +179,11 @@ void resetModemState()
     {
       modemClient.stop();
       //digitalWrite(DCD_PIN, LOW);
+    }
+  if( telnetClient.connected() )
+    {
+      telnetClient.stop();
+      //digitalWrite(DCD_PIN, HIGH);
     }
 }
 
@@ -701,6 +710,22 @@ void handleModemCommand()
                 }
               else if( toupper(cmd[ptr])=='A' )
                 {
+                  // force at least 1 second before responding
+                  delay(1000);
+
+                  if( server.available() ) 
+                    {
+                      telnetClient = server.accept();
+                      status = getConnectStatus();
+                      digitalWrite(DCD_PIN, LOW);
+
+                      resetTelnetState(clientTelnetState);
+                      modemCommandMode = false;
+                      modemEscapeState=0;
+                    }
+                  else
+                    status = E_NOCARRIER;
+
                   // ATA can not be followed by other commands
                   ptr = cmdLen;
                 }
@@ -712,6 +737,10 @@ void handleModemCommand()
                       if( modemClient && modemClient.connected() ) 
                         {
                           modemClient.stop();
+                        }
+                      if( telnetClient && telnetClient.connected() ) 
+                        {
+                          telnetClient.stop();
                         }
                       ModemData.reg[REG_CURLINESPEED] = 0;
                     }
@@ -1072,12 +1101,97 @@ void relayModemData()
 }
 
 
+void relayTelnetData()
+{
+  if (telnetClient.available())
+    {
+      //get data from the telnet client and push it to the UART
+      unsigned long t = millis();
+      while(telnetClient.available() && Serial.availableForWrite() && millis()-t < 100)
+        {
+          uint8_t b = telnetClient.read();
+          if( !handleTelnetProtocol(b, telnetClient, clientTelnetState) ) Serial.write(b);
+        }
+    }
+
+  if( millis() > prevCharTime + 20*ModemData.reg[REG_GUARDTIME] )
+    {
+      if( modemEscapeState==0 )
+        modemEscapeState = 1;
+      else if( modemEscapeState==4 )
+        {
+          // received [1 second pause] +++ [1 second pause]
+          // => switch to command mode
+          modemCommandMode = true;
+          printModemResult(E_OK);
+        }
+    }
+
+  //check UART for data
+  if( Serial.available() )
+    {
+      uint8_t buf[128];
+      int n = 0, millisPerChar = 1000 / (ModemData.baud / (1+ModemData.bits+ModemData.stopbits))+1;
+      unsigned long t, startTime = millis();
+
+      if( millisPerChar<5 ) millisPerChar = 5;
+      while( Serial.available() && n<sizeof(buf) && millis()-startTime < 100 )
+        {
+          uint8_t b = Serial.read();
+          buf[n++] = b;
+          prevCharTime = millis();
+
+          // if Telnet protocol handling is enabled then we need to duplicate IAC tokens
+          // if they occur in the general data stream
+          if( b==T_IAC && ModemData.reg[REG_TELNET] ) buf[n++] = b;
+
+          if( modemEscapeState>=1 && modemEscapeState<=3 && b==ModemData.reg[REG_ESC] )
+            modemEscapeState++;
+          else
+            modemEscapeState=0;
+
+          // wait a short time to see if another character is coming in so we
+          // can send multi-character (escape) sequences in the same packet
+          t = millis();
+          while( !Serial.available() && millis()-t < millisPerChar );
+        }
+
+      // push UART data to all connected telnet clients
+      if( !ModemData.reg[REG_TELNET] || clientTelnetState.sendBinary )
+        telnetClient.write(buf, n);
+      else
+        {
+          // if sending in telnet non-binary mode then a stand-alone CR (without LF) must be followd by NUL
+          uint8_t buf2[sizeof(buf)*2];
+          int j, m = 0;
+          for(j=0; j<n; j++)
+            {
+              buf2[m++] = buf[j];
+              if( buf[j]==0x0d && (j>=n-1 || buf[j+1]!=0x0a) ) buf2[m++] = 0;
+            }
+          telnetClient.write(buf2, m);
+        }
+    }
+}
+
+
 void loop()
 {
   if( modemClient && modemClient.connected() )
     {
+      // modem is connected. if telnet server has new client then reject
+      if( server.available() ) server.available().stop();
+
       // only relay data if not in command mode
       if( !modemCommandMode ) relayModemData();
+    }
+  else if( telnetClient && telnetClient.connected() )
+    {
+      // modem is connected. if telnet server has new client then reject
+      if( server.available() && server.available() != telnetClient ) server.available().stop();
+
+      // only relay data if not in command mode
+      if( !modemCommandMode ) relayTelnetData();
     }
   else
     {
@@ -1085,10 +1199,47 @@ void loop()
       if( !modemCommandMode )
         {
           if( modemClient ) modemClient.stop();
+          if( telnetClient ) telnetClient.stop();
 
           modemCommandMode = true;
           ModemData.reg[REG_CURLINESPEED] = 0;
           printModemResult(E_NOCARRIER);
+        }
+
+      // check if there are any new telnet clients
+      if( server.available() ) 
+        {
+          if( millis()-prevRingTime > RING_MILLIS )
+            {
+              if( ModemData.reg[1] >= 10 )
+                {
+                  // failsafe, after 10 rings we are not going to answer...
+                  server.available().stop();
+                  prevRingTime = 0;
+                  ModemData.reg[1] = 0;
+                }
+              else
+                {
+                  printModemResult(E_RING);
+                  prevRingTime = millis();
+                  ModemData.reg[1]++;
+                }
+            }
+
+          if( ModemData.reg[0] != 0 && ModemData.reg[1] >= ModemData.reg[0] )
+            {
+              // force at least 1 second before responding
+              delay(1000);
+
+              telnetClient = server.accept();
+              int i = getConnectStatus();
+              printModemResult(i);
+              digitalWrite(DCD_PIN, LOW);
+
+              resetTelnetState(clientTelnetState);
+              modemEscapeState=0;
+              modemCommandMode = false;
+            }
         }
       else
         {
