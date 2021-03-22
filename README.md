@@ -29,6 +29,12 @@ This is a firmware for Arduino+Ethernet module that emulates an Hayes-compatible
 
 When a call is established, type the escape sequence "+++" to switch to command mode.
 
+## Extended commands
+
+| Command | Description |
+| ------- | ----------- |
+| **+UART=baud,data,stop,parity,flow**  | Serial port configuration.<br><br>**baud** - UART baud rate<br>**data** - data bits (5-8)<br>**stop** - stop bits (1-2)<br>**parity** - 0 (none), 1 (odd), 2 (even)<br>**flow** - flow control (ignored) |
+
 ## S Register definitions
 
 The firmware allows to set and store all registers from 0 to 255, however only a small number have a meaning.
