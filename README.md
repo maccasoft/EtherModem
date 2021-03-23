@@ -1,4 +1,4 @@
-# WifiModem
+# EtherModem
 
 This is a firmware for Arduino+Ethernet module that emulates an Hayes-compatible modem.
 
