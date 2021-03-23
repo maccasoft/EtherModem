@@ -2,6 +2,34 @@
 
 This is a firmware for Arduino+Ethernet module that emulates an Hayes-compatible modem.
 
+## Wiring
+
+![Wiring](ArduinoUno_ENC28J60_bb.png)
+
+| ENC28J60 | Arduino UNO |
+| -------- | ----------- |
+|   CS     |     D10     |
+|   SI     |     D11     |
+|   SO     |     D12     |
+|   SCK    |     D13     |
+|   RESET  |     RESET   |
+|   VCC    |     3.3V    |
+|   GND    |     GND     |
+
+Optionally you can connect a standard 6-pin serial connector.
+
+| Serial | Arduino UNO     |
+| ------ | --------------- |
+|   6    |    N.C.         |
+|   5    |    TXD          |
+|   4    |    RXD          |
+|   3    |    5V (optional)|
+|   2    |    N.C.         |
+|   1    |    GND          |
+
+Pin 3 can be used to either power the serial device or the Arduino itself, in that case make sure the device can sustain
+both the Arduino and ENC28J60 boards.
+
 ## Command set
 
 | Command | Description |
