@@ -3,6 +3,8 @@
 #include <UIPEthernet.h>
 #include <Dns.h>
 
+#include <SoftwareSerial.h>
+
 uint8_t mac[6] = {
   0x00,0x01,0x02,0x03,0x04,0x05
 };
@@ -10,6 +12,14 @@ uint8_t mac[6] = {
 EthernetServer server(23);
 EthernetClient modemClient;
 EthernetClient telnetClient;
+
+#ifdef SoftwareSerial_h
+SoftwareSerial SWSerial(2, 3); // RX, TX
+#else
+#define SWSerial Serial
+#endif
+
+#define DCD_PIN 4
 
 unsigned long lastConnectCheck = 0;
 unsigned long prevCharTime = 0;
@@ -35,8 +45,6 @@ const PROGMEM uint8_t regDefaults[] = {2, '+',
 
 const PROGMEM int linespeeds[] = {0, 75, 110, 300, 600, 1200, 2400, 4800, 7200, 9600, 12000, 14400};
 #define NSPEEDS (sizeof(linespeeds)/sizeof(int))
-
-#define DCD_PIN            2
 
 #define REG_ESC            2
 #define REG_CR             3
@@ -104,20 +112,20 @@ struct ModemDataStruct
 } ModemData;
 
 
-void applySerialSettings()
+void applySWSerialSettings()
 {
-  Serial.flush();
-  Serial.end();
+  SWSerial.flush();
+  SWSerial.end();
   delay(100);
-  Serial.begin(ModemData.baud);
+  SWSerial.begin(ModemData.baud);
 }
 
 
-void clearSerialBuffer()
+void clearSWSerialBuffer()
 {
   // empty the serial buffer
   delay(100); 
-  while( Serial.available()>0 ) { Serial.read(); delay(10); }
+  while( SWSerial.available()>0 ) { SWSerial.read(); delay(10); }
 }
 
 
@@ -148,7 +156,7 @@ void setup()
       ModemData.verbose = true;
     }
 
-  Serial.begin(ModemData.baud);
+  SWSerial.begin(ModemData.baud);
   Ethernet.begin(mac);
 
   server.begin(23);
@@ -156,7 +164,7 @@ void setup()
   resetModemState();
 
   // flush serial input buffer
-  while( Serial.available() ) Serial.read();
+  while( SWSerial.available() ) SWSerial.read();
 
   printModemResult(E_OK);
 }
@@ -192,8 +200,8 @@ void resetModemState()
 
 void printModemCR()
 {
-  Serial.print(char(ModemData.reg[REG_CR]));
-  if( ModemData.verbose ) Serial.print(char(ModemData.reg[REG_LF]));
+  SWSerial.print(char(ModemData.reg[REG_CR]));
+  if( ModemData.verbose ) SWSerial.print(char(ModemData.reg[REG_LF]));
 }
 
 
@@ -202,9 +210,9 @@ void printMac()
   int i;
   for (i = 0; i < 6; i++)
     {
-      if (i != 0) Serial.print(F(":"));
-      if (mac[i] < 16) Serial.print(F("0"));
-      Serial.print(mac[i], HEX);
+      if (i != 0) SWSerial.print(F(":"));
+      if (mac[i] < 16) SWSerial.print(F("0"));
+      SWSerial.print(mac[i], HEX);
     }
 }
 
@@ -218,31 +226,31 @@ void printModemResult(byte code)
           printModemCR();
           switch( code )
             {
-            case E_OK            : Serial.print(F("OK"));             break;
-            case E_CONNECT       : Serial.print(F("CONNECT"));        break;
-            case E_RING          : Serial.print(F("RING"));           break;
-            case E_NOCARRIER     : Serial.print(F("NO CARRIER"));     break;
-            case E_ERROR         : Serial.print(F("ERROR"));          break;
-            case E_CONNECT1200   : Serial.print(F("CONNECT 1200"));   break;
-            case E_NODIALTONE    : Serial.print(F("NO DIALTONE"));    break;
-            case E_BUSY          : Serial.print(F("BUSY"));           break;
-            case E_NOANSWER      : Serial.print(F("NO ANSWER"));      break;
-            case E_CONNECT600    : Serial.print(F("CONNECT 600"));    break;
-            case E_CONNECT2400   : Serial.print(F("CONNECT 2400"));   break;
-            case E_CONNECT4800   : Serial.print(F("CONNECT 4800"));   break;
-            case E_CONNECT9600   : Serial.print(F("CONNECT 9600"));   break;
-            case E_CONNECT14400  : Serial.print(F("CONNECT 14400"));  break;
+            case E_OK            : SWSerial.print(F("OK"));             break;
+            case E_CONNECT       : SWSerial.print(F("CONNECT"));        break;
+            case E_RING          : SWSerial.print(F("RING"));           break;
+            case E_NOCARRIER     : SWSerial.print(F("NO CARRIER"));     break;
+            case E_ERROR         : SWSerial.print(F("ERROR"));          break;
+            case E_CONNECT1200   : SWSerial.print(F("CONNECT 1200"));   break;
+            case E_NODIALTONE    : SWSerial.print(F("NO DIALTONE"));    break;
+            case E_BUSY          : SWSerial.print(F("BUSY"));           break;
+            case E_NOANSWER      : SWSerial.print(F("NO ANSWER"));      break;
+            case E_CONNECT600    : SWSerial.print(F("CONNECT 600"));    break;
+            case E_CONNECT2400   : SWSerial.print(F("CONNECT 2400"));   break;
+            case E_CONNECT4800   : SWSerial.print(F("CONNECT 4800"));   break;
+            case E_CONNECT9600   : SWSerial.print(F("CONNECT 9600"));   break;
+            case E_CONNECT14400  : SWSerial.print(F("CONNECT 14400"));  break;
             default:
               {
                 char buf[20];
                 sprintf(buf, PSTR("ERROR%i"), code);
-                Serial.print(buf);
+                SWSerial.print(buf);
                 break;
               }
             }
         }
       else
-        Serial.print(code);
+        SWSerial.print(code);
 
       printModemCR();
     }
@@ -309,7 +317,7 @@ bool handleTelnetProtocol(uint8_t b, EthernetClient &client, struct TelnetStateS
 
   if( state.subnegotiation )
     {
-      if( ModemData.reg[REG_TELNET]>1 ) {Serial.print('<'); Serial.print(b, HEX);}
+      if( ModemData.reg[REG_TELNET]>1 ) {SWSerial.print('<'); SWSerial.print(b, HEX);}
 
       if( state.cmdLen==0 && b == T_IAC )
         state.cmdLen = 1; 
@@ -332,7 +340,7 @@ bool handleTelnetProtocol(uint8_t b, EthernetClient &client, struct TelnetStateS
       if( b==0 )
         {
           // CR->NUL => CR (i.e. ignore the NUL)
-          if( ModemData.reg[REG_TELNET]>1 ) Serial.print(F("<0d<00"));
+          if( ModemData.reg[REG_TELNET]>1 ) SWSerial.print(F("<0d<00"));
           return true;
         }
     }
@@ -352,13 +360,13 @@ bool handleTelnetProtocol(uint8_t b, EthernetClient &client, struct TelnetStateS
         {
           state.cmdLen = 1;
           state.cmd[0] = T_IAC;
-          if( ModemData.reg[REG_TELNET]>1 ) {Serial.print('<'); Serial.print(b, HEX);}
+          if( ModemData.reg[REG_TELNET]>1 ) {SWSerial.print('<'); SWSerial.print(b, HEX);}
           return true;
         }
     }
   else if( state.cmdLen==1 )
     {
-      if( ModemData.reg[REG_TELNET]>1 ) {Serial.print('<'); Serial.print(b, HEX);}
+      if( ModemData.reg[REG_TELNET]>1 ) {SWSerial.print('<'); SWSerial.print(b, HEX);}
       // received second byte of IAC sequence
       if( b == T_IAC )
         {
@@ -392,7 +400,7 @@ bool handleTelnetProtocol(uint8_t b, EthernetClient &client, struct TelnetStateS
   else if( state.cmdLen==2 )
     {
       // received third (i.e. last) byte of IAC sequence
-      if( ModemData.reg[REG_TELNET]>1 ) {Serial.print('<'); Serial.print(b, HEX);}
+      if( ModemData.reg[REG_TELNET]>1 ) {SWSerial.print('<'); SWSerial.print(b, HEX);}
       state.cmd[2] = b;
 
       bool reply = true;
@@ -439,7 +447,7 @@ bool handleTelnetProtocol(uint8_t b, EthernetClient &client, struct TelnetStateS
       if( reply ) 
         {
           if( ModemData.reg[REG_TELNET]>1 )
-            for(int k=0; k<3; k++) {Serial.print('>'); Serial.print(state.cmd[k], HEX);}
+            for(int k=0; k<3; k++) {SWSerial.print('>'); SWSerial.print(state.cmd[k], HEX);}
 
           client.write(state.cmd, 3);
 
@@ -457,7 +465,7 @@ bool handleTelnetProtocol(uint8_t b, EthernetClient &client, struct TelnetStateS
               buf[n++] = T_SE;
               client.write(buf, n);
               if( ModemData.reg[REG_TELNET]>1 )
-                for(int k=0; k<n; k++) {Serial.print('>'); Serial.print(buf[k], HEX);}
+                for(int k=0; k<n; k++) {SWSerial.print('>'); SWSerial.print(buf[k], HEX);}
             }
         }
 
@@ -550,9 +558,9 @@ void handleModemCommand()
   static char cmd[81];
   char c = 0;
 
-  if( Serial.available() )
+  if( SWSerial.available() )
     {
-      c = Serial.read() & 0x7f;
+      c = SWSerial.read() & 0x7f;
       if( cmdLen<80 && c>32 )
         cmd[cmdLen++] = c;
       else if( cmdLen>0 && c == ModemData.reg[REG_BSP] )
@@ -561,9 +569,9 @@ void handleModemCommand()
       if( ModemData.echo ) 
         {
           if( c == ModemData.reg[REG_BSP] )
-            { Serial.print(char(8)); Serial.print(' '); Serial.print(char(8)); }
+            { SWSerial.print(char(8)); SWSerial.print(' '); SWSerial.print(char(8)); }
           else
-            Serial.print(c);
+            SWSerial.print(c);
         }
 
       prevCharTime = millis();
@@ -580,9 +588,9 @@ void handleModemCommand()
     {
       while( (millis()-prevCharTime)<100 )
         {
-          if( Serial.available() )
+          if( SWSerial.available() )
             {
-              Serial.read();
+              SWSerial.read();
               break;
             }
         }
@@ -774,7 +782,7 @@ void handleModemCommand()
                 {
                   // reset serial settings to saved value
                   EEPROM.get(0, ModemData);
-                  applySerialSettings();
+                  applySWSerialSettings();
 
                   // reset parameters (ignore command parameter)
                   getCmdParam(cmd, ptr);
@@ -796,9 +804,9 @@ void handleModemCommand()
                       ptr++;
                       byte v = ModemData.reg[reg];
                       if( ModemData.verbose ) printModemCR();
-                      if( v<100 ) Serial.print('0');
-                      if( v<10  ) Serial.print('0');
-                      Serial.print(v);
+                      if( v<100 ) SWSerial.print('0');
+                      if( v<10  ) SWSerial.print('0');
+                      SWSerial.print(v);
                       printModemCR();
                     }
                   else if( cmd[ptr]=='=' )
@@ -816,91 +824,91 @@ void handleModemCommand()
                   if( n == 0 )
                     {
                       printModemCR();
-                      Serial.print(F("Ethernet/"));
+                      SWSerial.print(F("Ethernet/"));
                       switch(Ethernet.hardwareStatus())
                         {
                           case EthernetW5100:
-                            Serial.print(F("W5100"));
+                            SWSerial.print(F("W5100"));
                             break;
                           case EthernetW5200:
-                            Serial.print(F("W5200"));
+                            SWSerial.print(F("W5200"));
                             break;
                           case EthernetW5500:
-                            Serial.print(F("W5500"));
+                            SWSerial.print(F("W5500"));
                             break;
                           case EthernetENC28J60:
-                            Serial.print(F("ENC28J60"));
+                            SWSerial.print(F("ENC28J60"));
                             break;
                           default:
-                            Serial.print(F("Unknown"));
+                            SWSerial.print(F("Unknown"));
                             break;
                         }
-                      Serial.print(F(" Modem 1.0"));
+                      SWSerial.print(F(" Modem 1.0"));
                       printModemCR();
-                      Serial.print(F("IP="));
-                      Serial.print(Ethernet.localIP());
+                      SWSerial.print(F("IP="));
+                      SWSerial.print(Ethernet.localIP());
                       printModemCR();
-                      Serial.print(F("MAC="));
+                      SWSerial.print(F("MAC="));
                       printMac();
                     }
                   else if( n == 1 || n == 5 )
                     {
                       bool showAll = (n == 5);
                       printModemCR();
-                      Serial.print(F("AT"));
-                      Serial.print(ModemData.echo ? F("E1") : F("E0"));
+                      SWSerial.print(F("AT"));
+                      SWSerial.print(ModemData.echo ? F("E1") : F("E0"));
                       if( ModemData.quiet )
                         {
-                          Serial.print(F("Q1"));
+                          SWSerial.print(F("Q1"));
                           if( showAll )
                           {
-                            Serial.print(ModemData.verbose ? F("V1") : F("V0"));
-                            Serial.print(ModemData.extCodes ? F("X1") : F("X0"));
+                            SWSerial.print(ModemData.verbose ? F("V1") : F("V0"));
+                            SWSerial.print(ModemData.extCodes ? F("X1") : F("X0"));
                           }
                         }
                       else
                         {
-                          Serial.print(F("Q0"));
-                          Serial.print(ModemData.verbose ? F("V1") : F("V0"));
-                          Serial.print(ModemData.extCodes ? F("X1") : F("X0"));
+                          SWSerial.print(F("Q0"));
+                          SWSerial.print(ModemData.verbose ? F("V1") : F("V0"));
+                          SWSerial.print(ModemData.extCodes ? F("X1") : F("X0"));
                         }
-                      Serial.print(F("S0="));
-                      Serial.print(ModemData.reg[0]);
+                      SWSerial.print(F("S0="));
+                      SWSerial.print(ModemData.reg[0]);
                       if( ModemData.reg[REG_ESC] != '+' || showAll )
                         {
-                          Serial.print(F("S2="));
-                          Serial.print(ModemData.reg[REG_ESC]);
+                          SWSerial.print(F("S2="));
+                          SWSerial.print(ModemData.reg[REG_ESC]);
                         }
                       if( ModemData.reg[REG_CR] != 13 || showAll )
                         {
-                          Serial.print(F("S3="));
-                          Serial.print(ModemData.reg[REG_CR]);
+                          SWSerial.print(F("S3="));
+                          SWSerial.print(ModemData.reg[REG_CR]);
                         }
                       if( ModemData.reg[REG_LF] != 10 || showAll )
                         {
-                          Serial.print(F("S4="));
-                          Serial.print(ModemData.reg[REG_LF]);
+                          SWSerial.print(F("S4="));
+                          SWSerial.print(ModemData.reg[REG_LF]);
                         }
                       if( ModemData.reg[REG_BSP] != 8 || showAll )
                         {
-                          Serial.print(F("S5="));
-                          Serial.print(ModemData.reg[REG_BSP]);
+                          SWSerial.print(F("S5="));
+                          SWSerial.print(ModemData.reg[REG_BSP]);
                         }
                       if( ModemData.reg[REG_TELNET] != 0 || showAll )
                         {
-                          Serial.print(F("S15="));
-                          Serial.print(ModemData.reg[REG_TELNET]);
+                          SWSerial.print(F("S15="));
+                          SWSerial.print(ModemData.reg[REG_TELNET]);
                         }
                     }
                   else if( n == 2 )
                     {
                       printModemCR();
-                      Serial.print(Ethernet.localIP());
+                      SWSerial.print(Ethernet.localIP());
                     }
                   else if( n == 4 )
                     {
                       printModemCR();
-                      Serial.print(F("1.0"));
+                      SWSerial.print(F("1.0"));
                     }
                   else if( n == 6 )
                     {
@@ -943,7 +951,7 @@ void handleModemCommand()
                       ModemData.quiet = false;
                       ModemData.verbose = true;
 
-                      applySerialSettings();
+                      applySWSerialSettings();
 
                       // reset parameters (ignore command parameter)
                       getCmdParam(cmd, ptr);
@@ -989,7 +997,7 @@ void handleModemCommand()
                               // Ignore flow control
                             }
                           printModemResult(E_OK);
-                          applySerialSettings();
+                          applySWSerialSettings();
                           status = -1;
                         }
                       else
@@ -1027,13 +1035,13 @@ void relayModemData()
         {
           // use full modem<->computer data rate
           unsigned long t = millis();
-          while( modemClient.available() && Serial.availableForWrite() && millis()-t < 100 )
+          while( modemClient.available() && millis()-t < 100 )
             {
               uint8_t b = modemClient.read();
-              if( !handleTelnetProtocol(b, modemClient, modemTelnetState) ) Serial.write(b);
+              if( !handleTelnetProtocol(b, modemClient, modemTelnetState) ) SWSerial.write(b);
             }
         }
-      else if( modemClient.available() && Serial.availableForWrite() )
+      else if( modemClient.available() )
         {
           // limit data rate
           static unsigned long nextChar = 0;
@@ -1042,7 +1050,7 @@ void relayModemData()
               uint8_t b = modemClient.read();
               if( !handleTelnetProtocol(b, modemClient, modemTelnetState) )
                 {
-                  Serial.write(b);
+                  SWSerial.write(b);
                   nextChar = millis() + 10000/baud;
                 }
             }
@@ -1062,16 +1070,16 @@ void relayModemData()
         }
     }
 
-  if( Serial.available() )
+  if( SWSerial.available() )
     {
       uint8_t buf[128];
       int n = 0, millisPerChar = 1000 / (ModemData.baud / (1+ModemData.bits+ModemData.stopbits)) + 1;
       unsigned long startTime = millis();
 
       if( millisPerChar<5 ) millisPerChar = 5;
-      while( Serial.available() && n<sizeof(buf) && millis()-startTime < 100 )
+      while( SWSerial.available() && n<sizeof(buf) && millis()-startTime < 100 )
         {
-          uint8_t b = Serial.read();
+          uint8_t b = SWSerial.read();
 
           if( ModemData.reg[REG_TELNET] )
             {
@@ -1095,11 +1103,11 @@ void relayModemData()
           // wait a short time to see if another character is coming in so we
           // can send multi-character (escape) sequences in the same packet
           // some BBSs don't recognize the sequence if there is too much delay
-          while( !Serial.available() && millis()-prevCharTime < millisPerChar );
+          while( !SWSerial.available() && millis()-prevCharTime < millisPerChar );
         }
 
       // if not sending in binary mode then a stand-alone CR (without LF) must be followd by NUL
-      if( ModemData.reg[REG_TELNET] && !modemTelnetState.sendBinary && buf[n-1] == 0x0d && !Serial.available() ) buf[n++] = 0;
+      if( ModemData.reg[REG_TELNET] && !modemTelnetState.sendBinary && buf[n-1] == 0x0d && !SWSerial.available() ) buf[n++] = 0;
 
       modemClient.write(buf, n);
     }
@@ -1112,10 +1120,10 @@ void relayTelnetData()
     {
       //get data from the telnet client and push it to the UART
       unsigned long t = millis();
-      while(telnetClient.available() && Serial.availableForWrite() && millis()-t < 100)
+      while(telnetClient.available() && millis()-t < 100)
         {
           uint8_t b = telnetClient.read();
-          if( !handleTelnetProtocol(b, telnetClient, clientTelnetState) ) Serial.write(b);
+          if( !handleTelnetProtocol(b, telnetClient, clientTelnetState) ) SWSerial.write(b);
         }
     }
 
@@ -1133,16 +1141,16 @@ void relayTelnetData()
     }
 
   //check UART for data
-  if( Serial.available() )
+  if( SWSerial.available() )
     {
       uint8_t buf[128];
       int n = 0, millisPerChar = 1000 / (ModemData.baud / (1+ModemData.bits+ModemData.stopbits))+1;
       unsigned long t, startTime = millis();
 
       if( millisPerChar<5 ) millisPerChar = 5;
-      while( Serial.available() && n<sizeof(buf) && millis()-startTime < 100 )
+      while( SWSerial.available() && n<sizeof(buf) && millis()-startTime < 100 )
         {
-          uint8_t b = Serial.read();
+          uint8_t b = SWSerial.read();
           buf[n++] = b;
           prevCharTime = millis();
 
@@ -1158,7 +1166,7 @@ void relayTelnetData()
           // wait a short time to see if another character is coming in so we
           // can send multi-character (escape) sequences in the same packet
           t = millis();
-          while( !Serial.available() && millis()-t < millisPerChar );
+          while( !SWSerial.available() && millis()-t < millisPerChar );
         }
 
       // push UART data to all connected telnet clients

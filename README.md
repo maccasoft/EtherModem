@@ -16,13 +16,13 @@ This is a firmware for Arduino+Ethernet module that emulates an Hayes-compatible
 |   VCC    |     3.3V    |
 |   GND    |     GND     |
 
-Optionally you can connect a standard 6-pin serial connector.
+Wiring for a standard 6-pin serial connector.
 
 | Serial | Arduino UNO     |
 | ------ | --------------- |
 |   6    |    N.C.         |
-|   5    |    TXD          |
-|   4    |    RXD          |
+|   5    |    D3           |
+|   4    |    D2           |
 |   3    |    5V (optional)|
 |   2    |    N.C.         |
 |   1    |    GND          |
